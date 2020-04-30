@@ -30,4 +30,10 @@ protected:
 	afx_msg void OnPaint();
 	afx_msg HCURSOR OnQueryDragIcon();
 	DECLARE_MESSAGE_MAP()
+public:
+	CEdit dest_ctrl;
+	CComboBox device_ctrl;
+	CListCtrl file_list_ctrl;
+	afx_msg void OnCbnSelchangeDeviceCombo();
+	afx_msg void OnCbnDropdownDeviceCombo();
 };

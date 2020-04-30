@@ -185,20 +185,28 @@
   <ItemGroup>
     <ClInclude Include="CopyFileTool.h" />
     <ClInclude Include="CopyFileToolDlg.h" />
+    <ClInclude Include="device.h" />
+    <ClInclude Include="file_op.h" />
     <ClInclude Include="framework.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="Resource.h" />
+    <ClInclude Include="SCSI_IO.h" />
     <ClInclude Include="targetver.h" />
+    <ClInclude Include="utils.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="CopyFileTool.cpp" />
     <ClCompile Include="CopyFileToolDlg.cpp" />
+    <ClCompile Include="device.cpp" />
+    <ClCompile Include="file_op.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="SCSI_IO.cpp" />
+    <ClCompile Include="utils.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="CopyFileTool.rc" />
