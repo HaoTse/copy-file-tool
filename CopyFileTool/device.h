@@ -9,4 +9,8 @@ DWORD getCapacity(HANDLE hDevice);
 
 int enumUsbDisk(char usb_paths[], DWORD usb_capacity[], int cnt);
 
-DWORD getMaxTransfLen(HANDLE hDrive);
+DWORD getMaxTransfLen(HANDLE hDevice);
+
+BOOL checkIfDBR(HANDLE hDevice, BYTE* buf);
+
+BOOL getDBR(HANDLE hDevice, BYTE* buf);

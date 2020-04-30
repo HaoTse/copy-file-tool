@@ -22,9 +22,6 @@ HANDLE getHandle(char device_name) {
 	if (hDevice == INVALID_HANDLE_VALUE) {
 		TRACE("\n[Error] Open fail. Error Code = %u\n", GetLastError());
 	}
-	else {
-		TRACE("\n[Info] Get HANDLE success.\n");
-	}
 
 	return hDevice;
 }
@@ -46,9 +43,6 @@ DWORD getCapacity(HANDLE hDevice) {
 	// BLOCK LENGTH IN BYTES
 	bytesPerSecotr = capacity_buf[4] * (1 << 24) + capacity_buf[5] * (1 << 16)
 		+ capacity_buf[6] * (1 << 8) + capacity_buf[7];
-	//TRACE("\n[Info] Read capcaity success.\n");
-	//TRACE("\n[Msg] Sectors number: % d\n", sectors_num);
-	//TRACE("\n[Msg] Bytes per sectors: % d\n", bytesPerSecotr);
 
 	if (bytesPerSecotr != PHYSICAL_SECTOR_SIZE) {
 		TRACE("\n[Warn] PHYSICAL_SECTOR_SIZE is not equal to block length!\n");
@@ -102,12 +96,12 @@ int enumUsbDisk(char usb_paths[], DWORD usb_capacity[], int cnt)
 }
 
 // Obtain maximum transfer length
-DWORD getMaxTransfLen(HANDLE hDrive) {
+DWORD getMaxTransfLen(HANDLE hDevice) {
 	DWORD bytesReturned = 0;				// Number of bytes returned
 	IO_SCSI_CAPABILITIES scap = { 0 };		// Used to determine the maximum SCSI transfer length
 	DWORD maxTransfLen;						// Maximum Transfer Length
 
-	int retVal = DeviceIoControl(hDrive, IOCTL_SCSI_GET_CAPABILITIES, NULL, 0, &scap, sizeof(scap), &bytesReturned, NULL);
+	int retVal = DeviceIoControl(hDevice, IOCTL_SCSI_GET_CAPABILITIES, NULL, 0, &scap, sizeof(scap), &bytesReturned, NULL);
 	if (!retVal) {
 		//TRACE("\n[Warn] Cannot get SCSI capabilities. Error code = %u.\n", GetLastError());
 		maxTransfLen = SCSI_CAPABILITY_USB2;
@@ -118,4 +112,56 @@ DWORD getMaxTransfLen(HANDLE hDrive) {
 	}
 
 	return maxTransfLen;
+}
+
+BOOL checkIfDBR(HANDLE hDevice, BYTE* buf) {
+	// find out offset
+	DWORD hid_sec_num, rsvd_sec_num;
+	ULONGLONG FAT_offset;
+	BYTE FAT_buf[PHYSICAL_SECTOR_SIZE];
+
+	hid_sec_num = (buf[0x1C]) | (buf[0x1D] << 8) | (buf[0x1E] << 16) | (buf[0x1F] << 24);
+	rsvd_sec_num = (buf[0x0E]) | (buf[0x0F] << 8);
+	FAT_offset = (ULONGLONG)hid_sec_num * PHYSICAL_SECTOR_SIZE + (ULONGLONG)rsvd_sec_num * PHYSICAL_SECTOR_SIZE;
+
+	// read FAT
+	if (!SCSISectorIO(hDevice, FAT_offset, FAT_buf, PHYSICAL_SECTOR_SIZE, FALSE)) {
+		TRACE("\n[Error] Read FAT failed.\n");
+		return FALSE;
+	}
+	if (FAT_buf[0] == 0xF8 && FAT_buf[1] == 0xFF && FAT_buf[2] == 0xFF && FAT_buf[3] == 0x0F) {
+		return TRUE;
+	}
+
+	return FALSE;
+}
+
+BOOL getDBR(HANDLE hDevice, BYTE* buf) {
+	BYTE read_buf[PHYSICAL_SECTOR_SIZE];
+
+	// read first sector
+	if (!SCSISectorIO(hDevice, 0, read_buf, PHYSICAL_SECTOR_SIZE, FALSE)) {
+		TRACE("\n[Error] Read first sector failed.\n");
+		return FALSE;
+	}
+
+	// read_buf is DBR
+	if (checkIfDBR(hDevice, read_buf)) {
+		memcpy(buf, read_buf, PHYSICAL_SECTOR_SIZE);
+		return TRUE;
+	}
+	// read_buf is MBR
+	DWORD partition_addr = (read_buf[0x1C6]) | (read_buf[0x1C7] << 8) | (read_buf[0x1C8] << 16) | (read_buf[0x1C9] << 24);
+	ULONGLONG partition_offset = (ULONGLONG)partition_addr * PHYSICAL_SECTOR_SIZE;
+	if (!SCSISectorIO(hDevice, partition_offset, read_buf, PHYSICAL_SECTOR_SIZE, FALSE)) {
+		TRACE("\n[Error] Read DBR with MBR failed.\n");
+		return FALSE;
+	}
+	if (checkIfDBR(hDevice, read_buf)) {
+		memcpy(buf, read_buf, PHYSICAL_SECTOR_SIZE);
+		return TRUE;
+	}
+
+	TRACE("\n[Error] Can't find DBR.\n");
+	return FALSE;
 }

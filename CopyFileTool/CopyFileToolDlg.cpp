@@ -7,18 +7,19 @@
 #include "CopyFileTool.h"
 #include "CopyFileToolDlg.h"
 #include "afxdialogex.h"
+#include <vector>
 
 #include "device.h"
 #include "utils.h"
+#include "file_op.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
 
+using namespace std;
 
 // CCopyFileToolDlg dialog
-
-
 
 CCopyFileToolDlg::CCopyFileToolDlg(CWnd* pParent /*=nullptr*/)
 	: CDialogEx(IDD_COPYFILETOOL_DIALOG, pParent)
@@ -54,6 +55,14 @@ BOOL CCopyFileToolDlg::OnInitDialog()
 	SetIcon(m_hIcon, FALSE);		// Set small icon
 
 	// TODO: Add extra initialization here
+	// initial file list
+	file_list_ctrl.SetExtendedStyle(file_list_ctrl.GetExtendedStyle() |
+									LVS_EX_GRIDLINES |
+									LVS_EX_FULLROWSELECT |
+									LVS_EX_HEADERDRAGDROP);
+	file_list_ctrl.InsertColumn(0, _T("Name"), LVCFMT_LEFT, 250, 0);
+	file_list_ctrl.InsertColumn(1, _T("Size (Bytes)"), LVCFMT_LEFT, 90, 1);
+	file_list_ctrl.InsertColumn(2, _T("First Cluster"), LVCFMT_LEFT, 90, 2);
 
 	return TRUE;  // return TRUE  unless you set the focus to a control
 }
@@ -98,6 +107,9 @@ HCURSOR CCopyFileToolDlg::OnQueryDragIcon()
 
 void CCopyFileToolDlg::OnCbnSelchangeDeviceCombo()
 {
+	// reset file list
+	file_list_ctrl.DeleteAllItems();
+
 	// get selected device
 	CString text;
 	char device_name;
@@ -110,6 +122,28 @@ void CCopyFileToolDlg::OnCbnSelchangeDeviceCombo()
 	delete[] device_name_w_capacity;
 
 	TRACE(_T("\n[Msg] Device selected: %c:\n"), device_name);
+
+	// get file list
+	HANDLE hDevice = getHandle(device_name);
+	int file_num;
+	vector<CString> file_name, file_type;
+	vector<ULONGLONG> file_addr, file_size;
+	file_num = getFileList(hDevice, file_name, file_addr, file_size);
+	if (file_num < 0) {
+		MessageBox(_T("Get file list failed."), _T("Error"), MB_ICONERROR);
+		return;
+	}
+
+	for (int i = 0; i < file_num; i++) {
+		CString text;
+		int nRow = file_list_ctrl.InsertItem(0, file_name.at(i));
+		text.Format(_T("%llu"), file_size.at(i));
+		file_list_ctrl.SetItemText(nRow, 1, text);
+		text.Format(_T("%llu"), file_addr.at(i));
+		file_list_ctrl.SetItemText(nRow, 2, text);
+	}
+
+	CloseHandle(hDevice);
 }
 
 
