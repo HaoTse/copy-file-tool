@@ -3,11 +3,6 @@
 #include "fileSys.h"
 #include "SCSI_IO.h"
 
-FileSys::FileSys() {
-	memset(DBR_buf, 0, sizeof(DBR_buf));
-	memset(FAT_1st_sec_buf, 0, sizeof(FAT_1st_sec_buf));
-}
-
 FileSys::~FileSys() {
 	// reset vector
 	for (vector<FileInfo>::iterator iter = file_info.begin(); iter != file_info.end(); ) {
@@ -32,15 +27,13 @@ BOOL FileSys::checkIfDBR(HANDLE hDevice, DWORD max_transf_len, BYTE* buf) {
 		return FALSE;
 	}
 	if (tmp_FAT_buf[0] == 0xF8 && tmp_FAT_buf[1] == 0xFF && tmp_FAT_buf[2] == 0xFF && tmp_FAT_buf[3] == 0x0F) {
-		// store FAT 1st sector
-		memcpy(this->FAT_1st_sec_buf, tmp_FAT_buf, PHYSICAL_SECTOR_SIZE);
 		return TRUE;
 	}
 
 	return FALSE;
 }
 
-BOOL FileSys::getDBR(HANDLE hDevice, DWORD max_transf_len) {
+BOOL FileSys::getDBR(HANDLE hDevice, DWORD max_transf_len, BYTE* DBR_buf) {
 	BYTE read_buf[PHYSICAL_SECTOR_SIZE];
 
 	// read first sector
@@ -51,7 +44,7 @@ BOOL FileSys::getDBR(HANDLE hDevice, DWORD max_transf_len) {
 
 	// read_buf is DBR
 	if (checkIfDBR(hDevice, max_transf_len, read_buf)) {
-		memcpy(this->DBR_buf, read_buf, PHYSICAL_SECTOR_SIZE);
+		memcpy(DBR_buf, read_buf, PHYSICAL_SECTOR_SIZE);
 		return TRUE;
 	}
 	// read_buf is MBR
@@ -62,12 +55,26 @@ BOOL FileSys::getDBR(HANDLE hDevice, DWORD max_transf_len) {
 		return FALSE;
 	}
 	if (checkIfDBR(hDevice, max_transf_len, read_buf)) {
-		memcpy(this->DBR_buf, read_buf, PHYSICAL_SECTOR_SIZE);
+		memcpy(DBR_buf, read_buf, PHYSICAL_SECTOR_SIZE);
 		return TRUE;
 	}
 
 	TRACE("\n[Error] Can't find DBR.\n");
 	return FALSE;
+}
+
+int FileSys::findFATEntrySec(HANDLE hDevice, DWORD max_transf_len, DWORD last_clu_idx, DWORD clu_idx, BYTE* FAT_buf) {
+	DWORD entry_num_per_sec = PHYSICAL_SECTOR_SIZE >> 2;
+	DWORD entry_sec_idx = clu_idx / entry_num_per_sec, ralative_offset = clu_idx % entry_num_per_sec;
+	ULONGLONG entry_sec_offset = this->FAT_offset + ((ULONGLONG)entry_sec_idx * PHYSICAL_SECTOR_SIZE);
+
+	if (last_clu_idx == 0 || entry_sec_idx != (last_clu_idx / entry_num_per_sec)) {
+		if (!SCSISectorIO(hDevice, max_transf_len, entry_sec_offset, FAT_buf, PHYSICAL_SECTOR_SIZE, FALSE)) {
+			return -1;
+		}
+	}
+
+	return ralative_offset << 2;
 }
 
 void FileSys::initFileSys() {
@@ -76,16 +83,15 @@ void FileSys::initFileSys() {
 		iter = file_info.erase(iter);
 	}
 	vector<FileInfo>().swap(file_info);
-
-	memset(DBR_buf, 0, sizeof(DBR_buf));
-	memset(FAT_1st_sec_buf, 0, sizeof(FAT_1st_sec_buf));
 }
 
 int FileSys::getFileList(Device cur_device) {
 	/*
 	 * return value: file number (-1 is read fail)
 	 */
+	BYTE DBR_buf[PHYSICAL_SECTOR_SIZE];
 	DWORD hid_sec_num, rsvd_sec_num, root_begin_clu;
+	ULONGLONG byte_per_FAT;
 	DWORD file_cnt = 0;
 	vector<DWORD> root_clu_chain;
 
@@ -93,45 +99,51 @@ int FileSys::getFileList(Device cur_device) {
 	DWORD max_transf_len = cur_device.getMaxTransfLen();
 
 	// get DBR
-	if (!getDBR(hDevice, max_transf_len)) {
+	if (!getDBR(hDevice, max_transf_len, DBR_buf)) {
 		TRACE(_T("\n[Error] Get DBR failed.\n"));
 		CloseHandle(hDevice);
 		return -1;
 	}
 
-	this->sec_per_clu = this->DBR_buf[0x0D];
-	this->FAT_num = this->DBR_buf[0x10];
-	this->sec_per_FAT = (this->DBR_buf[0x24]) | (this->DBR_buf[0x25] << 8) 
-						| (this->DBR_buf[0x26] << 16) | (this->DBR_buf[0x27] << 24);
+	this->sec_per_clu = DBR_buf[0x0D];
+	this->FAT_num = DBR_buf[0x10];
+	this->sec_per_FAT = (DBR_buf[0x24]) | (DBR_buf[0x25] << 8) 
+						| (DBR_buf[0x26] << 16) | (DBR_buf[0x27] << 24);
 
-	hid_sec_num = (this->DBR_buf[0x1C]) | (this->DBR_buf[0x1D] << 8)
-				| (this->DBR_buf[0x1E] << 16) | (this->DBR_buf[0x1F] << 24);
-	rsvd_sec_num = (this->DBR_buf[0x0E]) | (this->DBR_buf[0x0F] << 8);
-	root_begin_clu = (this->DBR_buf[0x2C]) | (this->DBR_buf[0x2D] << 8)
-					| (this->DBR_buf[0x2E] << 16) | (this->DBR_buf[0x2F] << 24);
+	byte_per_FAT = (ULONGLONG)this->sec_per_FAT * PHYSICAL_SECTOR_SIZE;
 
-	// get FAT
+	hid_sec_num = (DBR_buf[0x1C]) | (DBR_buf[0x1D] << 8)
+				| (DBR_buf[0x1E] << 16) | (DBR_buf[0x1F] << 24);
+	rsvd_sec_num = (DBR_buf[0x0E]) | (DBR_buf[0x0F] << 8);
+	root_begin_clu = (DBR_buf[0x2C]) | (DBR_buf[0x2D] << 8)
+					| (DBR_buf[0x2E] << 16) | (DBR_buf[0x2F] << 24);
+
 	this->FAT_offset = ((ULONGLONG)hid_sec_num + rsvd_sec_num) * PHYSICAL_SECTOR_SIZE;
-	if (!this->FAT_1st_sec_buf) {
-		if (!SCSISectorIO(hDevice, max_transf_len, this->FAT_offset, this->FAT_1st_sec_buf, PHYSICAL_SECTOR_SIZE, FALSE)) {
-			TRACE("\n[Error] Read FAT failed.\n");
-			CloseHandle(hDevice);
-			return -1;
-		}
-	}
 
 	// get root cluster chain
-	DWORD cur_clu_idx = root_begin_clu, clu_entry_idx = root_begin_clu << 2;
-	DWORD nxt_clu_idx = (this->FAT_1st_sec_buf[clu_entry_idx + 0]) | (this->FAT_1st_sec_buf[clu_entry_idx + 1] << 8)
-						| (this->FAT_1st_sec_buf[clu_entry_idx + 2] << 16) | (this->FAT_1st_sec_buf[clu_entry_idx + 3] << 24);
+	DWORD cur_clu_idx = root_begin_clu, clu_entry_idx;
+	BYTE cur_FAT_buf[PHYSICAL_SECTOR_SIZE];
+	
+	// find the sector of needed FAT entry
+	clu_entry_idx = findFATEntrySec(hDevice, max_transf_len, 0, root_begin_clu, cur_FAT_buf);
+	if (clu_entry_idx < 0) {
+		TRACE("\n[Error] Read ROOT FAT entry failed.\n");
+		CloseHandle(hDevice);
+		return -1;
+	}
+
+	DWORD nxt_clu_idx = (cur_FAT_buf[clu_entry_idx + 0]) | (cur_FAT_buf[clu_entry_idx + 1] << 8)
+						| (cur_FAT_buf[clu_entry_idx + 2] << 16) | (cur_FAT_buf[clu_entry_idx + 3] << 24);
 	root_clu_chain.push_back(cur_clu_idx);
+	
 	while (nxt_clu_idx != 0x0FFFFFFF)
 	{
+		clu_entry_idx = findFATEntrySec(hDevice, max_transf_len, cur_clu_idx, nxt_clu_idx, cur_FAT_buf);
 		cur_clu_idx = nxt_clu_idx;
-		clu_entry_idx = cur_clu_idx << 2;
+		
 		root_clu_chain.push_back(cur_clu_idx);
-		nxt_clu_idx = (this->FAT_1st_sec_buf[clu_entry_idx + 0]) | (this->FAT_1st_sec_buf[clu_entry_idx + 1] << 8)
-					| (this->FAT_1st_sec_buf[clu_entry_idx + 2] << 16) | (this->FAT_1st_sec_buf[clu_entry_idx + 3] << 24);
+		nxt_clu_idx = (cur_FAT_buf[clu_entry_idx + 0]) | (cur_FAT_buf[clu_entry_idx + 1] << 8)
+					| (cur_FAT_buf[clu_entry_idx + 2] << 16) | (cur_FAT_buf[clu_entry_idx + 3] << 24);
 	}
 
 	// get directory entries in root
