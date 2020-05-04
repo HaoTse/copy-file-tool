@@ -7,17 +7,12 @@
 #include "CopyFileTool.h"
 #include "CopyFileToolDlg.h"
 #include "afxdialogex.h"
-#include <vector>
 
-#include "device.h"
 #include "utils.h"
-#include "file_op.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
-
-using namespace std;
 
 // CCopyFileToolDlg dialog
 
@@ -110,25 +105,18 @@ void CCopyFileToolDlg::OnCbnSelchangeDeviceCombo()
 	// reset file list
 	file_list_ctrl.DeleteAllItems();
 
-	// get selected device
-	CString text;
-	char device_name;
-	int device_idx = device_ctrl.GetCurSel();
-	
-	char* device_name_w_capacity;
-	device_ctrl.GetLBText(device_idx, text);
-	device_name_w_capacity = cstr2str(text);
-	device_name = device_name_w_capacity[0]; // only store the identifier
-	delete[] device_name_w_capacity;
+	// reset file system object
+	file_sys.initFileSys();
 
-	TRACE(_T("\n[Msg] Device selected: %c:\n"), device_name);
+	// get selected device
+	int device_idx = device_ctrl.GetCurSel();
+	Device cur_device = device_list.at(device_idx);
+
+	TRACE(_T("\n[Msg] Device selected: %c:\n"), cur_device.getIdent());
 
 	// get file list
-	HANDLE hDevice = getHandle(device_name);
 	int file_num;
-	vector<CString> file_name, file_type;
-	vector<ULONGLONG> file_addr, file_size;
-	file_num = getFileList(hDevice, file_name, file_addr, file_size);
+	file_num = file_sys.getFileList(cur_device);
 	if (file_num < 0) {
 		MessageBox(_T("Get file list failed."), _T("Error"), MB_ICONERROR);
 		return;
@@ -136,14 +124,13 @@ void CCopyFileToolDlg::OnCbnSelchangeDeviceCombo()
 
 	for (int i = 0; i < file_num; i++) {
 		CString text;
-		int nRow = file_list_ctrl.InsertItem(0, file_name.at(i));
-		text.Format(_T("%llu"), file_size.at(i));
+		FileInfo cur_file = file_sys.file_info.at(i);
+		int nRow = file_list_ctrl.InsertItem(0, cur_file.file_name);
+		text.Format(_T("%llu"), cur_file.file_size);
 		file_list_ctrl.SetItemText(nRow, 1, text);
-		text.Format(_T("%llu"), file_addr.at(i));
+		text.Format(_T("%llu"), cur_file.file_addr);
 		file_list_ctrl.SetItemText(nRow, 2, text);
 	}
-
-	CloseHandle(hDevice);
 }
 
 
@@ -152,25 +139,21 @@ void CCopyFileToolDlg::OnCbnDropdownDeviceCombo()
 	// empty options
 	device_ctrl.ResetContent();
 
+	// reset device_list
+	for (vector<Device>::iterator iter = device_list.begin(); iter != device_list.end(); ) {
+		iter = device_list.erase(iter);
+	}
+	vector<Device>().swap(device_list);
+
 	// set device combo box
-	char usb_volume[8] = { 0 };
-	DWORD usb_capacity_sec[8];
-	int usb_cnt = enumUsbDisk(usb_volume, usb_capacity_sec, 8);
+	int usb_cnt = enumUsbDisk(device_list, 8);
 	if (usb_cnt == -1) {
 		MessageBox(_T("Enumerate usb disk failed."), _T("Error"), MB_ICONERROR);
 	}
 	else {
 		for (int i = 0; i < usb_cnt; i++) {
-			CString text;
-			DWORD capacity_MB = (usb_capacity_sec[i] >> 20) * PHYSICAL_SECTOR_SIZE;
-			if (capacity_MB > 1024) {
-				double capacity_GB = (double)capacity_MB / 1024;
-				text.Format(_T("%c: (%.1f GB)"), usb_volume[i], capacity_GB);
-			}
-			else {
-				text.Format(_T("%c: (%u MB)"), usb_volume[i], capacity_MB);
-			}
-			device_ctrl.InsertString(i, text);
+			Device cur_device = device_list.at(i);
+			device_ctrl.InsertString(i, cur_device.showText());
 		}
 	}
 	SetDropDownHeight(&device_ctrl, usb_cnt);

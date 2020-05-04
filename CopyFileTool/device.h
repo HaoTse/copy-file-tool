@@ -3,14 +3,19 @@
 // The physical sector size in bytes
 #define PHYSICAL_SECTOR_SIZE 512
 
-HANDLE getHandle(char device_name);
+class Device
+{
+private:
+	char ident;
+	DWORD capacity_sec, byte_per_sec, max_transf_len;
 
-DWORD getCapacity(HANDLE hDevice);
-
-int enumUsbDisk(char usb_paths[], DWORD usb_capacity[], int cnt);
-
-DWORD getMaxTransfLen(HANDLE hDevice);
-
-BOOL checkIfDBR(HANDLE hDevice, BYTE* buf);
-
-BOOL getDBR(HANDLE hDevice, BYTE* buf);
+	void initCapacity();
+	void initMaxTransfLen();
+public:
+	Device(char ident);
+	HANDLE openDevice();
+	char getIdent();
+	DWORD getCapacity();
+	DWORD getMaxTransfLen();
+	CString showText();
+};

@@ -21,3 +21,48 @@ void SetDropDownHeight(CComboBox* pMyComboBox, int itemsToShow) {
 	rctDropDown.bottom = rctDropDown.top + rctComboBox.Height() + itemHeight * itemsToShow; // Set height   
 	pMyComboBox->MoveWindow(&rctDropDown); // enable changes  
 }
+
+int enumUsbDisk(vector<Device> &device_list, int cnt)
+{
+	int usb_disk_cnt = 0;
+
+	char disk_path[5] = { 0 };
+	DWORD all_disk = GetLogicalDrives();
+
+	int i = 0;
+	DWORD bytes_returned = 0;
+	while (all_disk && usb_disk_cnt < cnt)
+	{
+		if ((all_disk & 0x1) == 1)
+		{
+			sprintf_s(disk_path, "%c:", 'A' + i);
+
+
+			if (GetDriveTypeA(disk_path) == DRIVE_REMOVABLE)
+			{
+				// get device capacity
+				Device tmp_device('A' + i);
+				HANDLE hDevice = tmp_device.openDevice();
+				if (hDevice == INVALID_HANDLE_VALUE) {
+					TRACE("Open %s failed.", disk_path);
+					CloseHandle(hDevice);
+					return -1;
+				}
+				DWORD capacity_sec = tmp_device.getCapacity();
+				if (capacity_sec == 0) {
+					CloseHandle(hDevice);
+					continue; // skip invalid device (include card reader)
+				}
+
+				device_list.push_back(tmp_device);
+				usb_disk_cnt++;
+
+				CloseHandle(hDevice);
+			}
+		}
+		all_disk = all_disk >> 1;
+		i++;
+	}
+
+	return usb_disk_cnt;
+}

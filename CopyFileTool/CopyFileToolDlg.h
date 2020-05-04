@@ -4,6 +4,12 @@
 
 #pragma once
 
+#include <vector>
+
+#include "device.h"
+#include "fileSys.h"
+
+using namespace std;
 
 // CCopyFileToolDlg dialog
 class CCopyFileToolDlg : public CDialogEx
@@ -34,6 +40,8 @@ public:
 	CEdit dest_ctrl;
 	CComboBox device_ctrl;
 	CListCtrl file_list_ctrl;
+	vector<Device> device_list;
+	FileSys file_sys;
 	afx_msg void OnCbnSelchangeDeviceCombo();
 	afx_msg void OnCbnDropdownDeviceCombo();
 };

@@ -186,7 +186,7 @@
     <ClInclude Include="CopyFileTool.h" />
     <ClInclude Include="CopyFileToolDlg.h" />
     <ClInclude Include="device.h" />
-    <ClInclude Include="file_op.h" />
+    <ClInclude Include="fileSys.h" />
     <ClInclude Include="framework.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="Resource.h" />
@@ -198,7 +198,7 @@
     <ClCompile Include="CopyFileTool.cpp" />
     <ClCompile Include="CopyFileToolDlg.cpp" />
     <ClCompile Include="device.cpp" />
-    <ClCompile Include="file_op.cpp" />
+    <ClCompile Include="fileSys.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>

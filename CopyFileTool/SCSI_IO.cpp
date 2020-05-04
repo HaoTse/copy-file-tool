@@ -43,7 +43,7 @@ BOOL SCSIReadCapacity(HANDLE hDevice, BYTE* capacityBuf) {
 }
 
 // SCSI Read/Write Sector
-BOOL SCSISectorIO(HANDLE hDrive, ULONGLONG offset, LPBYTE buffer, UINT buffSize, BOOLEAN write) {
+BOOL SCSISectorIO(HANDLE hDrive, DWORD maxTransfLen, ULONGLONG offset, LPBYTE buffer, UINT buffSize, BOOLEAN write) {
 	SCSI_PASS_THROUGH_DIRECT srb = { 0 };	// SCSI Request Block Structure
 	DWORD bytesReturned = 0;				// Number of bytes returned
 	DWORD curSize = buffSize;				// Current Transfer Size
@@ -54,8 +54,6 @@ BOOL SCSISectorIO(HANDLE hDrive, ULONGLONG offset, LPBYTE buffer, UINT buffSize,
 		TRACE("\n[Error] Buffer setup error.\n");
 		return FALSE;
 	}
-
-	DWORD maxTransfLen = getMaxTransfLen(hDrive);
 
 	// Inizialize common SCSI_PASS_THROUGH_DIRECT members 
 	RtlZeroMemory(&srb, sizeof(SCSI_PASS_THROUGH_DIRECT));

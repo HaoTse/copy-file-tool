@@ -42,7 +42,7 @@
     <ClInclude Include="utils.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="file_op.h">
+    <ClInclude Include="fileSys.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -65,7 +65,7 @@
     <ClCompile Include="utils.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="file_op.cpp">
+    <ClCompile Include="fileSys.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
