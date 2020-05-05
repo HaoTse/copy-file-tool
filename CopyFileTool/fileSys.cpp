@@ -203,9 +203,35 @@ int FileSys::getFileList(Device cur_device) {
 				tmp_size = entry_tmp[0x1C] | (entry_tmp[0x1D] << 8) | (entry_tmp[0x1E] << 16) | (entry_tmp[0x1F] << 24);
 
 				FileInfo cur_file;
-				LFN_content.TrimRight(remove_word);
-				LFN_content.TrimRight(end_word);
-				cur_file.file_name = LFN_content;
+
+				// get file name
+				if (LFN_content == _T("")) {
+					CString SFN_name = _T(""), ext_name = _T("");
+					for (DWORD j = 0x00; j <= 0x07; j++) {
+						if (entry_tmp[j] == 0x20)
+							break;
+						CString cur_ascii;
+						cur_ascii.Format(_T("%c"), entry_tmp[j]);
+						SFN_name += cur_ascii;
+					}
+					for (DWORD j = 0x08; j <= 0x0A; j++) {
+						if (entry_tmp[j] == 0x20)
+							break;
+						CString cur_ascii;
+						cur_ascii.Format(_T("%c"), entry_tmp[j]);
+						ext_name += cur_ascii;
+					}
+					if (ext_name != _T("")) {
+						SFN_name += _T(".") + ext_name;
+					}
+					cur_file.file_name = SFN_name;
+				}
+				else {
+					LFN_content.TrimRight(remove_word);
+					LFN_content.TrimRight(end_word);
+					cur_file.file_name = LFN_content;
+				}
+
 				cur_file.file_addr = tmp_addr;
 				cur_file.file_size = tmp_size;
 				file_info.push_back(cur_file);
