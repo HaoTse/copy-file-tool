@@ -149,6 +149,7 @@ int FileSys::getFileList(Device cur_device) {
 	// get directory entries in root
 	this->heap_offset = this->FAT_offset + ((ULONGLONG)this->sec_per_FAT * this->FAT_num) * PHYSICAL_SECTOR_SIZE;
 	DWORD entry_num_per_clu = (this->sec_per_clu * PHYSICAL_SECTOR_SIZE) >> 5;
+	wchar_t remove_word = 0xFFFF, end_word = 0x0000;
 	CString LFN_content = _T("");
 
 	for (DWORD cur_clu_idx : root_clu_chain) {
@@ -179,10 +180,12 @@ int FileSys::getFileList(Device cur_device) {
 					wchar_t cur_unicode = entry_tmp[j] | entry_tmp[j + 1] << 8;
 					tmp_LFN += CString(cur_unicode);
 				}
+
 				for (DWORD j = 0xE; j <= 0x19; j += 2) {
 					wchar_t cur_unicode = entry_tmp[j] | entry_tmp[j + 1] << 8;
 					tmp_LFN += CString(cur_unicode);
 				}
+
 				for (DWORD j = 0x1C; j <= 0x1F; j += 2) {
 					wchar_t cur_unicode = entry_tmp[j] | entry_tmp[j + 1] << 8;
 					tmp_LFN += CString(cur_unicode);
@@ -200,6 +203,8 @@ int FileSys::getFileList(Device cur_device) {
 				tmp_size = entry_tmp[0x1C] | (entry_tmp[0x1D] << 8) | (entry_tmp[0x1E] << 16) | (entry_tmp[0x1F] << 24);
 
 				FileInfo cur_file;
+				LFN_content.TrimRight(remove_word);
+				LFN_content.TrimRight(end_word);
 				cur_file.file_name = LFN_content;
 				cur_file.file_addr = tmp_addr;
 				cur_file.file_size = tmp_size;

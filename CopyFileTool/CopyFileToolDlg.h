@@ -44,4 +44,5 @@ public:
 	FileSys file_sys;
 	afx_msg void OnCbnSelchangeDeviceCombo();
 	afx_msg void OnCbnDropdownDeviceCombo();
+	afx_msg void OnBnClickedCopy();
 };

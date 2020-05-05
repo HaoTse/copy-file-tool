@@ -35,6 +35,7 @@ BEGIN_MESSAGE_MAP(CCopyFileToolDlg, CDialogEx)
 	ON_WM_QUERYDRAGICON()
 	ON_CBN_SELCHANGE(IDC_DEVICE_COMBO, &CCopyFileToolDlg::OnCbnSelchangeDeviceCombo)
 	ON_CBN_DROPDOWN(IDC_DEVICE_COMBO, &CCopyFileToolDlg::OnCbnDropdownDeviceCombo)
+	ON_BN_CLICKED(IDCOPY, &CCopyFileToolDlg::OnBnClickedCopy)
 END_MESSAGE_MAP()
 
 
@@ -58,6 +59,10 @@ BOOL CCopyFileToolDlg::OnInitDialog()
 	file_list_ctrl.InsertColumn(0, _T("Name"), LVCFMT_LEFT, 250, 0);
 	file_list_ctrl.InsertColumn(1, _T("Size (Bytes)"), LVCFMT_LEFT, 90, 1);
 	file_list_ctrl.InsertColumn(2, _T("First Cluster"), LVCFMT_LEFT, 90, 2);
+
+	// set the dest
+	dest_ctrl.SetWindowText(_T("D:\\copyFile_dest"));
+	dest_ctrl.EnableWindow(FALSE);
 
 	return TRUE;  // return TRUE  unless you set the focus to a control
 }
@@ -157,4 +162,47 @@ void CCopyFileToolDlg::OnCbnDropdownDeviceCombo()
 		}
 	}
 	SetDropDownHeight(&device_ctrl, usb_cnt);
+}
+
+
+void CCopyFileToolDlg::OnBnClickedCopy()
+{
+	// get dest path
+	CString dest;
+	dest_ctrl.GetWindowText(dest);
+	TRACE(_T("\n[Msg] Destination: %s\n"), dest);
+	if (!directoryExists(dest)) {
+		MessageBox(_T("Destination directory error."), _T("Error"), MB_ICONERROR);
+		return;
+	}
+
+	// get select file information
+	FileInfo selected_file;
+	POSITION pos = file_list_ctrl.GetFirstSelectedItemPosition();
+	int selected_cnt = 0;
+
+	if (pos == NULL) {
+		MessageBox(_T("Must select one file."), _T("Error"), MB_ICONERROR);
+		return;
+	}
+	while (pos)	{
+		if (++selected_cnt > 1) {
+			MessageBox(_T("Can't select more than one file."), _T("Error"), MB_ICONERROR);
+			return;
+		}
+		
+		CString text;
+		int n_item = file_list_ctrl.GetNextSelectedItem(pos);
+		
+		selected_file.file_name = file_list_ctrl.GetItemText(n_item, 0);
+		selected_file.file_size = _ttoll(text = file_list_ctrl.GetItemText(n_item, 1));
+		selected_file.file_addr = _ttoll(file_list_ctrl.GetItemText(n_item, 2));
+	}
+
+	// check if dest file exist
+	CString dest_file_path = dest + _T("\\") + selected_file.file_name;
+	if (fileExists(dest_file_path)) {
+		MessageBox(_T("Destination file exists."), _T("Error"), MB_ICONERROR);
+		return;
+	}
 }
