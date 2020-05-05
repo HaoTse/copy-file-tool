@@ -12,6 +12,7 @@ private:
 	void initCapacity();
 	void initMaxTransfLen();
 public:
+	Device();
 	Device(char ident);
 	HANDLE openDevice();
 	char getIdent();

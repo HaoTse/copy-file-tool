@@ -41,6 +41,7 @@ public:
 	CComboBox device_ctrl;
 	CListCtrl file_list_ctrl;
 	vector<Device> device_list;
+	Device cur_device;
 	FileSys file_sys;
 	afx_msg void OnCbnSelchangeDeviceCombo();
 	afx_msg void OnCbnDropdownDeviceCombo();

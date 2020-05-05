@@ -6,6 +6,13 @@
 // The scsi capability of USB2.0
 #define SCSI_CAPABILITY_USB2 8192
 
+Device::Device() {
+	this->ident = NULL;
+	capacity_sec = 0;
+	byte_per_sec = 0;
+	max_transf_len = 0;
+}
+
 Device::Device(char ident) {
 	this->ident = ident;
 	this->initCapacity();

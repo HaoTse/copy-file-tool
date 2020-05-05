@@ -115,7 +115,7 @@ void CCopyFileToolDlg::OnCbnSelchangeDeviceCombo()
 
 	// get selected device
 	int device_idx = device_ctrl.GetCurSel();
-	Device cur_device = device_list.at(device_idx);
+	cur_device = device_list.at(device_idx);
 
 	TRACE(_T("\n[Msg] Device selected: %c:\n"), cur_device.getIdent());
 
@@ -131,9 +131,9 @@ void CCopyFileToolDlg::OnCbnSelchangeDeviceCombo()
 		CString text;
 		FileInfo cur_file = file_sys.file_info.at(i);
 		int nRow = file_list_ctrl.InsertItem(0, cur_file.file_name);
-		text.Format(_T("%llu"), cur_file.file_size);
+		text.Format(_T("%lu"), cur_file.file_size);
 		file_list_ctrl.SetItemText(nRow, 1, text);
-		text.Format(_T("%llu"), cur_file.file_addr);
+		text.Format(_T("%lu"), cur_file.file_addr);
 		file_list_ctrl.SetItemText(nRow, 2, text);
 	}
 }
@@ -195,8 +195,8 @@ void CCopyFileToolDlg::OnBnClickedCopy()
 		int n_item = file_list_ctrl.GetNextSelectedItem(pos);
 		
 		selected_file.file_name = file_list_ctrl.GetItemText(n_item, 0);
-		selected_file.file_size = _ttoll(text = file_list_ctrl.GetItemText(n_item, 1));
-		selected_file.file_addr = _ttoll(file_list_ctrl.GetItemText(n_item, 2));
+		selected_file.file_size = _ttoi(text = file_list_ctrl.GetItemText(n_item, 1));
+		selected_file.file_addr = _ttoi(file_list_ctrl.GetItemText(n_item, 2));
 	}
 
 	// check if dest file exist
@@ -204,5 +204,12 @@ void CCopyFileToolDlg::OnBnClickedCopy()
 	if (fileExists(dest_file_path)) {
 		MessageBox(_T("Destination file exists."), _T("Error"), MB_ICONERROR);
 		return;
+	}
+
+	if (file_sys.copyfile(cur_device, dest_file_path, selected_file)) {
+		MessageBox(_T("Copy file succeed."), _T("Information"), MB_ICONINFORMATION);
+	}
+	else {
+		MessageBox(_T("Copy file failed."), _T("Error"), MB_ICONERROR);
 	}
 }

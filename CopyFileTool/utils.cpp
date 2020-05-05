@@ -11,6 +11,14 @@ char* cstr2str(CString cstr) {
 	return nstringw;
 }
 
+wchar_t* cstr2strW(CString cstr) {
+	const size_t newsizew = (cstr.GetLength() + 1) * 2;
+	wchar_t* n2stringw = new wchar_t[newsizew];
+	wcscpy_s(n2stringw, newsizew, cstr);
+
+	return n2stringw;
+}
+
 void SetDropDownHeight(CComboBox* pMyComboBox, int itemsToShow) {
 	// Get rectangles    
 	CRect rctComboBox, rctDropDown;
@@ -44,7 +52,7 @@ int enumUsbDisk(vector<Device> &device_list, int cnt)
 				Device tmp_device('A' + i);
 				HANDLE hDevice = tmp_device.openDevice();
 				if (hDevice == INVALID_HANDLE_VALUE) {
-					TRACE("Open %s failed.", disk_path);
+					TRACE("\n[Error] Open %s failed.\n", disk_path);
 					CloseHandle(hDevice);
 					return -1;
 				}

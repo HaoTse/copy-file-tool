@@ -2,6 +2,7 @@
 #include "pch.h"
 #include "fileSys.h"
 #include "SCSI_IO.h"
+#include "utils.h"
 
 FileSys::~FileSys() {
 	// reset vector
@@ -23,7 +24,7 @@ BOOL FileSys::checkIfDBR(HANDLE hDevice, DWORD max_transf_len, BYTE* buf) {
 
 	// read FAT
 	if (!SCSISectorIO(hDevice, max_transf_len, tmp_FAT_offset, tmp_FAT_buf, PHYSICAL_SECTOR_SIZE, FALSE)) {
-		TRACE("\n[Error] Read FAT failed.\n");
+		TRACE(_T("\n[Error] Read FAT failed. Error Code = %u.\n"), GetLastError());
 		return FALSE;
 	}
 	if (tmp_FAT_buf[0] == 0xF8 && tmp_FAT_buf[1] == 0xFF && tmp_FAT_buf[2] == 0xFF && tmp_FAT_buf[3] == 0x0F) {
@@ -38,7 +39,7 @@ BOOL FileSys::getDBR(HANDLE hDevice, DWORD max_transf_len, BYTE* DBR_buf) {
 
 	// read first sector
 	if (!SCSISectorIO(hDevice, max_transf_len, 0, read_buf, PHYSICAL_SECTOR_SIZE, FALSE)) {
-		TRACE("\n[Error] Read first sector failed.\n");
+		TRACE(_T("\n[Error] Read first sector failed. Error Code = %u.\n"), GetLastError());
 		return FALSE;
 	}
 
@@ -51,7 +52,7 @@ BOOL FileSys::getDBR(HANDLE hDevice, DWORD max_transf_len, BYTE* DBR_buf) {
 	DWORD partition_addr = (read_buf[0x1C6]) | (read_buf[0x1C7] << 8) | (read_buf[0x1C8] << 16) | (read_buf[0x1C9] << 24);
 	ULONGLONG partition_offset = (ULONGLONG)partition_addr * PHYSICAL_SECTOR_SIZE;
 	if (!SCSISectorIO(hDevice, max_transf_len, partition_offset, read_buf, PHYSICAL_SECTOR_SIZE, FALSE)) {
-		TRACE("\n[Error] Read DBR with MBR failed.\n");
+		TRACE(_T("\n[Error] Read DBR with MBR failed. Error Code = %u.\n"), GetLastError());
 		return FALSE;
 	}
 	if (checkIfDBR(hDevice, max_transf_len, read_buf)) {
@@ -59,7 +60,7 @@ BOOL FileSys::getDBR(HANDLE hDevice, DWORD max_transf_len, BYTE* DBR_buf) {
 		return TRUE;
 	}
 
-	TRACE("\n[Error] Can't find DBR.\n");
+	TRACE(_T("\n[Error] Can't find DBR. Error Code = %u.\n"), GetLastError());
 	return FALSE;
 }
 
@@ -75,6 +76,29 @@ int FileSys::findFATEntrySec(HANDLE hDevice, DWORD max_transf_len, DWORD last_cl
 	}
 
 	return ralative_offset << 2;
+}
+
+BOOL FileSys::getCluChain(HANDLE hDevice, DWORD max_transf_len, DWORD begin_clu_idx, vector<DWORD>& clu_chain)
+{
+	DWORD cur_clu_idx = 0, nxt_clu_idx = begin_clu_idx, clu_entry_idx;
+	BYTE cur_FAT_buf[PHYSICAL_SECTOR_SIZE];
+
+	// link cluster chain
+	do {
+		// find the sector of needed FAT entry
+		clu_entry_idx = findFATEntrySec(hDevice, max_transf_len, cur_clu_idx, nxt_clu_idx, cur_FAT_buf);
+		if (clu_entry_idx < 0) {
+			TRACE(_T("\n[Error] Read FAT entry failed. Error Code = %u.\n"), GetLastError());
+			return FALSE;
+		}
+		cur_clu_idx = nxt_clu_idx;
+
+		clu_chain.push_back(cur_clu_idx);
+		nxt_clu_idx = (cur_FAT_buf[clu_entry_idx + 0]) | (cur_FAT_buf[clu_entry_idx + 1] << 8)
+			| (cur_FAT_buf[clu_entry_idx + 2] << 16) | (cur_FAT_buf[clu_entry_idx + 3] << 24);
+	} while (nxt_clu_idx != 0x0FFFFFFF);
+
+	return TRUE;
 }
 
 void FileSys::initFileSys() {
@@ -97,10 +121,15 @@ int FileSys::getFileList(Device cur_device) {
 
 	HANDLE hDevice = cur_device.openDevice();
 	DWORD max_transf_len = cur_device.getMaxTransfLen();
+	if (hDevice == INVALID_HANDLE_VALUE) {
+		TRACE(_T("\n[Error] Open usb device failed. Error Code = %u.\n"), GetLastError());
+		CloseHandle(hDevice);
+		return -1;
+	}
 
 	// get DBR
 	if (!getDBR(hDevice, max_transf_len, DBR_buf)) {
-		TRACE(_T("\n[Error] Get DBR failed.\n"));
+		TRACE(_T("\n[Error] Get DBR failed. Error Code = %u.\n"), GetLastError());
 		CloseHandle(hDevice);
 		return -1;
 	}
@@ -121,29 +150,10 @@ int FileSys::getFileList(Device cur_device) {
 	this->FAT_offset = ((ULONGLONG)hid_sec_num + rsvd_sec_num) * PHYSICAL_SECTOR_SIZE;
 
 	// get root cluster chain
-	DWORD cur_clu_idx = root_begin_clu, clu_entry_idx;
-	BYTE cur_FAT_buf[PHYSICAL_SECTOR_SIZE];
-	
-	// find the sector of needed FAT entry
-	clu_entry_idx = findFATEntrySec(hDevice, max_transf_len, 0, root_begin_clu, cur_FAT_buf);
-	if (clu_entry_idx < 0) {
-		TRACE("\n[Error] Read ROOT FAT entry failed.\n");
+	if (!getCluChain(hDevice, max_transf_len, root_begin_clu, root_clu_chain)) {
+		TRACE(_T("\n[Error] Get ROOT cluster chain failed. Error Code = %u.\n"), GetLastError());
 		CloseHandle(hDevice);
 		return -1;
-	}
-
-	DWORD nxt_clu_idx = (cur_FAT_buf[clu_entry_idx + 0]) | (cur_FAT_buf[clu_entry_idx + 1] << 8)
-						| (cur_FAT_buf[clu_entry_idx + 2] << 16) | (cur_FAT_buf[clu_entry_idx + 3] << 24);
-	root_clu_chain.push_back(cur_clu_idx);
-	
-	while (nxt_clu_idx != 0x0FFFFFFF)
-	{
-		clu_entry_idx = findFATEntrySec(hDevice, max_transf_len, cur_clu_idx, nxt_clu_idx, cur_FAT_buf);
-		cur_clu_idx = nxt_clu_idx;
-		
-		root_clu_chain.push_back(cur_clu_idx);
-		nxt_clu_idx = (cur_FAT_buf[clu_entry_idx + 0]) | (cur_FAT_buf[clu_entry_idx + 1] << 8)
-					| (cur_FAT_buf[clu_entry_idx + 2] << 16) | (cur_FAT_buf[clu_entry_idx + 3] << 24);
 	}
 
 	// get directory entries in root
@@ -157,7 +167,7 @@ int FileSys::getFileList(Device cur_device) {
 		BYTE* cur_clu = new BYTE[this->sec_per_clu * PHYSICAL_SECTOR_SIZE];
 		ULONGLONG cur_clu_offset = this->heap_offset + ((ULONGLONG)cur_clu_idx - 2) * this->sec_per_clu * PHYSICAL_SECTOR_SIZE;
 		if (!SCSISectorIO(hDevice, max_transf_len, cur_clu_offset, cur_clu, this->sec_per_clu * PHYSICAL_SECTOR_SIZE, FALSE)) {
-			TRACE("\n[Error] Read root cluster failed.\n");
+			TRACE(_T("\n[Error] Read root cluster failed. Error Code = %u.\n"), GetLastError());
 			delete[] cur_clu;
 			CloseHandle(hDevice);
 			return -1;
@@ -247,4 +257,89 @@ int FileSys::getFileList(Device cur_device) {
 
 	CloseHandle(hDevice);
 	return file_cnt;
+}
+
+BOOL FileSys::copyfile(Device cur_device, CString dest_path, FileInfo source_file) {
+	// open destination file
+	wchar_t* dest_pathW = cstr2strW(dest_path);
+	HANDLE hDest = CreateFile(dest_pathW,
+							GENERIC_WRITE,
+							0,
+							NULL,
+							CREATE_NEW,
+							FILE_ATTRIBUTE_NORMAL,
+							NULL);
+	delete[] dest_pathW;
+	if (hDest == INVALID_HANDLE_VALUE) {
+		TRACE(_T("\n[Error] Open destination file failed. Error Code = %u.\n"), GetLastError());
+		CloseHandle(hDest);
+		return FALSE;
+	}
+
+	// check if empty file
+	if (source_file.file_size == 0 && source_file.file_addr == 0) {
+		TRACE(_T("\n[Info] Copy an empty file. Error Code = %u.\n"), GetLastError());
+		CloseHandle(hDest);
+		return TRUE;
+	}
+
+	// device information
+	HANDLE hDevice = cur_device.openDevice();
+	DWORD max_transf_len = cur_device.getMaxTransfLen();
+	if (hDevice == INVALID_HANDLE_VALUE) {
+		TRACE(_T("\n[Error] Open usb device failed. Error Code = %u.\n"), GetLastError());
+		CloseHandle(hDest);
+		CloseHandle(hDevice);
+		return FALSE;
+	}
+
+	// get cluster chain
+	vector<DWORD> clu_chain;
+	DWORD file_begin_clu = source_file.file_addr;
+	if (!getCluChain(hDevice, max_transf_len, file_begin_clu, clu_chain)) {
+		TRACE(_T("\n[Error] Get cluster chain failed. Error Code = %u.\n"), GetLastError());
+		CloseHandle(hDest);
+		CloseHandle(hDevice);
+		return FALSE;
+	}
+
+	// read file content
+	DWORD dw_bytes_to_write = source_file.file_size, total_bytes_write = 0, dw_bytes_write;
+	for (DWORD cur_clu_idx : clu_chain) {
+		// read cluster
+		DWORD bytes_per_clu = this->sec_per_clu * PHYSICAL_SECTOR_SIZE;
+		BYTE* cur_clu = new BYTE[bytes_per_clu];
+		ULONGLONG cur_clu_offset = this->heap_offset + ((ULONGLONG)cur_clu_idx - 2) * bytes_per_clu;
+		if (!SCSISectorIO(hDevice, max_transf_len, cur_clu_offset, cur_clu, bytes_per_clu, FALSE)) {
+			TRACE(_T("\n[Error] Read file content failed. Error Code = %u.\n"), GetLastError());
+			delete[] cur_clu;
+			CloseHandle(hDest);
+			CloseHandle(hDevice);
+			return FALSE;
+		}
+
+		// write file
+		DWORD cur_bytes_to_write = (dw_bytes_to_write > bytes_per_clu) ? bytes_per_clu : dw_bytes_to_write;
+		if (!WriteFile(hDest, cur_clu, cur_bytes_to_write, &dw_bytes_write, NULL)) {
+			TRACE(_T("\n[Error] Write file failed. Error Code = %u.\n"), GetLastError());
+			delete[] cur_clu;
+			CloseHandle(hDest);
+			CloseHandle(hDevice);
+			return FALSE;
+		}
+
+		dw_bytes_to_write -= dw_bytes_write;
+		total_bytes_write += dw_bytes_write;
+
+		delete[] cur_clu;
+	}
+	if (total_bytes_write != source_file.file_size) {
+		TRACE(_T("\n[Warn] The written file size isn't identical. Write bytes: %lu; File size: %lu\n"),
+				total_bytes_write, source_file.file_size);
+	}
+
+	CloseHandle(hDest);
+	CloseHandle(hDevice);
+
+	return TRUE;
 }
