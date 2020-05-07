@@ -49,4 +49,5 @@ public:
 	afx_msg void OnBnClickedCopyWin();
 	CStatic copy_time_ctrl;
 	CStatic apicopy_time_ctrl;
+	afx_msg void OnBnClickedDelete();
 };
