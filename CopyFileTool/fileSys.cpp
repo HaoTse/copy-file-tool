@@ -305,9 +305,9 @@ BOOL FileSys::copyfile(Device cur_device, CString dest_path, FileInfo source_fil
 
 	// read file content
 	DWORD dw_bytes_to_write = source_file.file_size, total_bytes_write = 0, dw_bytes_write;
+	DWORD bytes_per_clu = this->sec_per_clu * PHYSICAL_SECTOR_SIZE;
 	for (DWORD cur_clu_idx : clu_chain) {
 		// read cluster
-		DWORD bytes_per_clu = this->sec_per_clu * PHYSICAL_SECTOR_SIZE;
 		BYTE* cur_clu = new BYTE[bytes_per_clu];
 		ULONGLONG cur_clu_offset = this->heap_offset + ((ULONGLONG)cur_clu_idx - 2) * bytes_per_clu;
 		if (!SCSISectorIO(hDevice, max_transf_len, cur_clu_offset, cur_clu, bytes_per_clu, FALSE)) {
@@ -334,12 +334,27 @@ BOOL FileSys::copyfile(Device cur_device, CString dest_path, FileInfo source_fil
 		delete[] cur_clu;
 	}
 	if (total_bytes_write != source_file.file_size) {
-		TRACE(_T("\n[Warn] The written file size isn't identical. Write bytes: %lu; File size: %lu\n"),
+		TRACE(_T("\n[Warn] The written file size isn't identical. Write bytes: %lu; File size: %lu.\n"),
 				total_bytes_write, source_file.file_size);
 	}
 
 	CloseHandle(hDest);
 	CloseHandle(hDevice);
+
+	return TRUE;
+}
+
+BOOL FileSys::copyfileByAPI(Device cur_device, CString dest_path, FileInfo source_file)
+{
+	// get source file path
+	char ident = cur_device.getIdent();
+	CString source_path;
+	source_path.Format(_T("%c:\\%s"), ident, source_file.file_name);
+	
+	if (!CopyFile(source_path, dest_path, TRUE)) {
+		TRACE(_T("\n[Error] Copy file by API failed. Error Code = %u.\n"), GetLastError());
+		return FALSE;
+	}
 
 	return TRUE;
 }

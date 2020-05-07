@@ -29,4 +29,5 @@ public:
 	void initFileSys();
 	int getFileList(Device cur_device);
 	BOOL copyfile(Device cur_device, CString dest_path, FileInfo source_file);
+	BOOL copyfileByAPI(Device cur_device, CString dest_path, FileInfo source_file);
 };

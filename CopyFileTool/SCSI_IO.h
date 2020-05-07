@@ -18,7 +18,7 @@ Copyright (C) 2016 Cisco Systems Inc
 
 #define SCSIOP_WRITE 0x2A
 #define SCSIOP_READ  0x28
-#define SCSI_TIMEOUT 0x100
+#define SCSI_TIMEOUT 0xFFFF
 
 // Command to get capacity of volume
 BOOL SCSIReadCapacity(HANDLE hDevice, BYTE* capacityBuf);

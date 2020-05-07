@@ -65,7 +65,7 @@ BOOL SCSISectorIO(HANDLE hDrive, DWORD maxTransfLen, ULONGLONG offset, LPBYTE bu
 		srb.DataIn = SCSI_IOCTL_DATA_OUT;
 	else
 		srb.DataIn = SCSI_IOCTL_DATA_IN;
-	srb.TimeOutValue = 0x100;
+	srb.TimeOutValue = SCSI_TIMEOUT;
 
 	while (curSize) {
 		if (curSize > maxTransfLen)

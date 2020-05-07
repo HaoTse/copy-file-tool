@@ -46,4 +46,5 @@ public:
 	afx_msg void OnCbnSelchangeDeviceCombo();
 	afx_msg void OnCbnDropdownDeviceCombo();
 	afx_msg void OnBnClickedCopy();
+	afx_msg void OnBnClickedCopyWin();
 };
