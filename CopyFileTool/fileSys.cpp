@@ -13,7 +13,21 @@ FileSys::~FileSys() {
 }
 
 BOOL FileSys::checkIfDBR(HANDLE hDevice, DWORD max_transf_len, BYTE* buf) {
-	// find out offset
+	/*
+	 * Use two way to double check:
+	 *	1. Check jumpBoot and signature value.
+	 *	2. Check FAT entries.
+	 */
+
+	// check jumpBoot and signature value
+	if (buf[0x0] != 0xEB || buf[0x1] != 0x58 || buf[0x2] != 0x90) {
+		return FALSE;
+	}
+	if (buf[0x1FE] != 0x55 || buf[0x1FF] != 0xAA) {
+		return FALSE;
+	}
+
+	// check FAT entries
 	DWORD tmp_hid_sec_num, tmp_rsvd_sec_num;
 	ULONGLONG tmp_FAT_offset;
 	BYTE tmp_FAT_buf[PHYSICAL_SECTOR_SIZE];
