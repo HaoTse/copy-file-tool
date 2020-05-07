@@ -175,8 +175,8 @@ void CCopyFileToolDlg::OnBnClickedCopy()
 	dest_ctrl.GetWindowText(dest);
 	TRACE(_T("\n[Msg] Destination: %s\n"), dest);
 	if (!directoryExists(dest)) {
-		MessageBox(_T("Destination directory error."), _T("Error"), MB_ICONERROR);
-		return;
+		CreateDirectory(dest, NULL);
+		MessageBox(_T("Create destination directory."), _T("Information"), MB_ICONINFORMATION);
 	}
 
 	// get select file information
@@ -241,8 +241,8 @@ void CCopyFileToolDlg::OnBnClickedCopyWin()
 	dest_ctrl.GetWindowText(dest);
 	TRACE(_T("\n[Msg] Destination: %s\n"), dest);
 	if (!directoryExists(dest)) {
-		MessageBox(_T("Destination directory error."), _T("Error"), MB_ICONERROR);
-		return;
+		CreateDirectory(dest, NULL);
+		MessageBox(_T("Create destination directory."), _T("Information"), MB_ICONINFORMATION);
 	}
 
 	// get select file information
