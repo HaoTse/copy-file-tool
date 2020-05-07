@@ -31,6 +31,11 @@ DWORD Device::getMaxTransfLen() {
 	return this->max_transf_len;
 }
 
+BOOL Device::isValid()
+{
+	return this->byte_per_sec <= 4096;
+}
+
 HANDLE Device::openDevice() {
 	char device_path[10];
 

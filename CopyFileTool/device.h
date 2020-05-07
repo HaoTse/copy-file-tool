@@ -18,5 +18,6 @@ public:
 	char getIdent();
 	DWORD getCapacity();
 	DWORD getMaxTransfLen();
+	BOOL isValid();
 	CString showText();
 };

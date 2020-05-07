@@ -56,14 +56,12 @@ int enumUsbDisk(vector<Device> &device_list, int cnt)
 					CloseHandle(hDevice);
 					return -1;
 				}
-				DWORD capacity_sec = tmp_device.getCapacity();
-				if (capacity_sec == 0) {
-					CloseHandle(hDevice);
-					continue; // skip invalid device (include card reader)
-				}
 
-				device_list.push_back(tmp_device);
-				usb_disk_cnt++;
+				// skip invalid device (include card reader)
+				if (tmp_device.isValid()) {
+					device_list.push_back(tmp_device);
+					usb_disk_cnt++;
+				}
 
 				CloseHandle(hDevice);
 			}
