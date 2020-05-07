@@ -28,6 +28,8 @@ void CCopyFileToolDlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDC_DEST_EDIT, dest_ctrl);
 	DDX_Control(pDX, IDC_DEVICE_COMBO, device_ctrl);
 	DDX_Control(pDX, IDC_FILE_LIST, file_list_ctrl);
+	DDX_Control(pDX, IDC_COPYTIME, copy_time_ctrl);
+	DDX_Control(pDX, IDC_APICOPYTIME, apicopy_time_ctrl);
 }
 
 BEGIN_MESSAGE_MAP(CCopyFileToolDlg, CDialogEx)
@@ -207,7 +209,23 @@ void CCopyFileToolDlg::OnBnClickedCopy()
 		return;
 	}
 
+	// timer
+	LARGE_INTEGER nFreq;
+	LARGE_INTEGER nBeginTime;
+	LARGE_INTEGER nEndTime;
+	double time;
+	CString show_time = _T("");
+	copy_time_ctrl.SetWindowText(show_time);
+
+	QueryPerformanceFrequency(&nFreq);
+	QueryPerformanceCounter(&nBeginTime);
+
 	if (file_sys.copyfile(cur_device, dest_file_path, selected_file)) {
+		QueryPerformanceCounter(&nEndTime);
+		time = ((double)(nEndTime.QuadPart - nBeginTime.QuadPart) * 1000) / (double)nFreq.QuadPart;
+		show_time.Format(_T("%.3f ms"), time);
+		copy_time_ctrl.SetWindowText(show_time);
+
 		MessageBox(_T("Copy file succeed."), _T("Information"), MB_ICONINFORMATION);
 	}
 	else {
@@ -257,7 +275,23 @@ void CCopyFileToolDlg::OnBnClickedCopyWin()
 		return;
 	}
 
+	// timer
+	LARGE_INTEGER nFreq;
+	LARGE_INTEGER nBeginTime;
+	LARGE_INTEGER nEndTime;
+	double time;
+	CString show_time = _T("");
+	apicopy_time_ctrl.SetWindowText(show_time);
+
+	QueryPerformanceFrequency(&nFreq);
+	QueryPerformanceCounter(&nBeginTime);
+
 	if (file_sys.copyfileByAPI(cur_device, dest_file_path, selected_file)) {
+		QueryPerformanceCounter(&nEndTime);
+		time = ((double)(nEndTime.QuadPart - nBeginTime.QuadPart) * 1000) / (double)nFreq.QuadPart;
+		show_time.Format(_T("%.3f ms"), time);
+		apicopy_time_ctrl.SetWindowText(show_time);
+
 		MessageBox(_T("Copy file succeed."), _T("Information"), MB_ICONINFORMATION);
 	}
 	else {

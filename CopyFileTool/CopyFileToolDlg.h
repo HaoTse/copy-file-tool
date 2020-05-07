@@ -47,4 +47,6 @@ public:
 	afx_msg void OnCbnDropdownDeviceCombo();
 	afx_msg void OnBnClickedCopy();
 	afx_msg void OnBnClickedCopyWin();
+	CStatic copy_time_ctrl;
+	CStatic apicopy_time_ctrl;
 };
