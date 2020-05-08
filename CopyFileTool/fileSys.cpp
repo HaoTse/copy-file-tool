@@ -78,13 +78,13 @@ BOOL FileSys::getDBR(HANDLE hDevice, DWORD max_transf_len, BYTE* DBR_buf) {
 	return FALSE;
 }
 
-int FileSys::findFATEntrySec(HANDLE hDevice, DWORD max_transf_len, DWORD last_clu_idx, DWORD clu_idx, BYTE* FAT_buf) {
-	DWORD entry_num_per_sec = PHYSICAL_SECTOR_SIZE >> 2;
-	DWORD entry_sec_idx = clu_idx / entry_num_per_sec, ralative_offset = clu_idx % entry_num_per_sec;
-	ULONGLONG entry_sec_offset = this->FAT_offset + ((ULONGLONG)entry_sec_idx * PHYSICAL_SECTOR_SIZE);
+int FileSys::findFATEntryBuf(HANDLE hDevice, DWORD max_transf_len, DWORD last_clu_idx, DWORD clu_idx, BYTE* FAT_buf) {
+	DWORD entry_num_per_buf = max_transf_len >> 2;
+	DWORD entry_buf_idx = clu_idx / entry_num_per_buf, ralative_offset = clu_idx % entry_num_per_buf;
+	ULONGLONG entry_sec_offset = this->FAT_offset + ((ULONGLONG)entry_buf_idx * max_transf_len);
 
-	if (last_clu_idx == 0 || entry_sec_idx != (last_clu_idx / entry_num_per_sec)) {
-		if (!SCSISectorIO(hDevice, max_transf_len, entry_sec_offset, FAT_buf, PHYSICAL_SECTOR_SIZE, FALSE)) {
+	if (last_clu_idx == 0 || entry_buf_idx != (last_clu_idx / entry_num_per_buf)) {
+		if (!SCSISectorIO(hDevice, max_transf_len, entry_sec_offset, FAT_buf, max_transf_len, FALSE)) {
 			return -1;
 		}
 	}
@@ -95,14 +95,15 @@ int FileSys::findFATEntrySec(HANDLE hDevice, DWORD max_transf_len, DWORD last_cl
 BOOL FileSys::getCluChain(HANDLE hDevice, DWORD max_transf_len, DWORD begin_clu_idx, vector<DWORD>& clu_chain)
 {
 	DWORD cur_clu_idx = 0, nxt_clu_idx = begin_clu_idx, clu_entry_idx;
-	BYTE cur_FAT_buf[PHYSICAL_SECTOR_SIZE];
+	BYTE* cur_FAT_buf = new BYTE[max_transf_len];
 
 	// link cluster chain
 	do {
 		// find the sector of needed FAT entry
-		clu_entry_idx = findFATEntrySec(hDevice, max_transf_len, cur_clu_idx, nxt_clu_idx, cur_FAT_buf);
+		clu_entry_idx = findFATEntryBuf(hDevice, max_transf_len, cur_clu_idx, nxt_clu_idx, cur_FAT_buf);
 		if (clu_entry_idx < 0) {
 			TRACE(_T("\n[Error] Read FAT entry failed. Error Code = %u.\n"), GetLastError());
+			delete[] cur_FAT_buf;
 			return FALSE;
 		}
 		cur_clu_idx = nxt_clu_idx;
@@ -112,6 +113,7 @@ BOOL FileSys::getCluChain(HANDLE hDevice, DWORD max_transf_len, DWORD begin_clu_
 			| (cur_FAT_buf[clu_entry_idx + 2] << 16) | (cur_FAT_buf[clu_entry_idx + 3] << 24);
 	} while (nxt_clu_idx != 0x0FFFFFFF);
 
+	delete[] cur_FAT_buf;
 	return TRUE;
 }
 
