@@ -4,7 +4,7 @@
 #include "SCSI_IO.h"
 
 // The scsi capability of USB2.0
-#define SCSI_CAPABILITY_USB2 8192
+#define SCSI_CAPABILITY_USB2 65536
 
 Device::Device() {
 	this->ident = NULL;
