@@ -320,23 +320,33 @@ BOOL FileSys::copyfile(Device cur_device, CString dest_path, FileInfo source_fil
 	// read file content
 	DWORD dw_bytes_to_write = source_file.file_size, total_bytes_write = 0, dw_bytes_write;
 	DWORD bytes_per_clu = this->sec_per_clu * PHYSICAL_SECTOR_SIZE;
-	for (DWORD cur_clu_idx : clu_chain) {
-		// read cluster
-		BYTE* cur_clu = new BYTE[bytes_per_clu];
-		ULONGLONG cur_clu_offset = this->heap_offset + ((ULONGLONG)cur_clu_idx - 2) * bytes_per_clu;
-		if (!SCSISectorIO(hDevice, max_transf_len, cur_clu_offset, cur_clu, bytes_per_clu, FALSE)) {
+	BYTE* read_buf = new BYTE[max_transf_len];
+
+	DWORD begin_clu_idx = clu_chain.at(0);
+	DWORD read_size = 0;
+	for (auto it = clu_chain.begin(); it != clu_chain.end(); it++) {
+		DWORD cur_clu_idx = *it;
+		// check if continus cluster
+		read_size += bytes_per_clu;
+		if (next(it) != clu_chain.end() && cur_clu_idx + 1 == *next(it) && read_size + bytes_per_clu <= max_transf_len) {
+			continue;
+		}
+
+		// read clusters
+		ULONGLONG cur_clu_offset = this->heap_offset + ((ULONGLONG)begin_clu_idx - 2) * bytes_per_clu;
+		if (!SCSISectorIO(hDevice, max_transf_len, cur_clu_offset, read_buf, read_size, FALSE)) {
 			TRACE(_T("\n[Error] Read file content failed. Error Code = %u.\n"), GetLastError());
-			delete[] cur_clu;
+			delete[] read_buf;
 			CloseHandle(hDest);
 			CloseHandle(hDevice);
 			return FALSE;
 		}
 
 		// write file
-		DWORD cur_bytes_to_write = (dw_bytes_to_write > bytes_per_clu) ? bytes_per_clu : dw_bytes_to_write;
-		if (!WriteFile(hDest, cur_clu, cur_bytes_to_write, &dw_bytes_write, NULL)) {
+		DWORD cur_bytes_to_write = (dw_bytes_to_write > read_size) ? read_size : dw_bytes_to_write;
+		if (!WriteFile(hDest, read_buf, cur_bytes_to_write, &dw_bytes_write, NULL)) {
 			TRACE(_T("\n[Error] Write file failed. Error Code = %u.\n"), GetLastError());
-			delete[] cur_clu;
+			delete[] read_buf;
 			CloseHandle(hDest);
 			CloseHandle(hDevice);
 			return FALSE;
@@ -345,8 +355,15 @@ BOOL FileSys::copyfile(Device cur_device, CString dest_path, FileInfo source_fil
 		dw_bytes_to_write -= dw_bytes_write;
 		total_bytes_write += dw_bytes_write;
 
-		delete[] cur_clu;
+		read_size = 0;
+		if (next(it) != clu_chain.end()) {
+			begin_clu_idx = *next(it);
+		}
+
 	}
+
+	delete[] read_buf;
+
 	if (total_bytes_write != source_file.file_size) {
 		TRACE(_T("\n[Warn] The written file size isn't identical. Write bytes: %lu; File size: %lu.\n"),
 				total_bytes_write, source_file.file_size);
