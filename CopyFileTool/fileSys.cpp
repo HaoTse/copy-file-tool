@@ -322,10 +322,12 @@ BOOL FileSys::copyfile(Device cur_device, CString dest_path, FileInfo source_fil
 	// read file content
 	DWORD dw_bytes_to_write = source_file.file_size, total_bytes_write = 0, dw_bytes_write;
 	DWORD bytes_per_clu = this->sec_per_clu * PHYSICAL_SECTOR_SIZE;
+	DWORD write_max = 512 << 10; // minimum: max_transf_len(524288)
 	BYTE* read_buf = new BYTE[max_transf_len];
+	BYTE* write_buf = new BYTE[write_max];
 
 	DWORD begin_clu_idx = clu_chain.at(0);
-	DWORD read_size = 0;
+	DWORD read_size = 0, write_size = 0;
 	for (auto it = clu_chain.begin(); it != clu_chain.end(); it++) {
 		DWORD cur_clu_idx = *it;
 		// check if continus cluster
@@ -339,32 +341,43 @@ BOOL FileSys::copyfile(Device cur_device, CString dest_path, FileInfo source_fil
 		if (!SCSISectorIO(hDevice, max_transf_len, cur_clu_offset, read_buf, read_size, FALSE)) {
 			TRACE(_T("\n[Error] Read file content failed. Error Code = %u.\n"), GetLastError());
 			delete[] read_buf;
+			delete[] write_buf;
 			CloseHandle(hDest);
 			CloseHandle(hDevice);
 			return FALSE;
 		}
 
-		// write file
-		DWORD cur_bytes_to_write = (dw_bytes_to_write > read_size) ? read_size : dw_bytes_to_write;
-		if (!WriteFile(hDest, read_buf, cur_bytes_to_write, &dw_bytes_write, NULL)) {
-			TRACE(_T("\n[Error] Write file failed. Error Code = %u.\n"), GetLastError());
-			delete[] read_buf;
-			CloseHandle(hDest);
-			CloseHandle(hDevice);
-			return FALSE;
-		}
-
-		dw_bytes_to_write -= dw_bytes_write;
-		total_bytes_write += dw_bytes_write;
-
-		read_size = 0;
 		if (next(it) != clu_chain.end()) {
 			begin_clu_idx = *next(it);
 		}
 
+		// check if write now
+		memcpy(write_buf + write_size, read_buf, read_size);
+		write_size += read_size;
+		read_size = 0;
+		if (next(it) != clu_chain.end() && write_size + max_transf_len <= write_max) {
+			continue;
+		}
+
+		// write file
+		DWORD cur_bytes_to_write = (dw_bytes_to_write > write_size) ? write_size : dw_bytes_to_write;
+		if (!WriteFile(hDest, write_buf, cur_bytes_to_write, &dw_bytes_write, NULL)) {
+			TRACE(_T("\n[Error] Write file failed. Error Code = %u.\n"), GetLastError());
+			delete[] read_buf;
+			delete[] write_buf;
+			CloseHandle(hDest);
+			CloseHandle(hDevice);
+			return FALSE;
+		}
+		write_size = 0;
+
+		dw_bytes_to_write -= dw_bytes_write;
+		total_bytes_write += dw_bytes_write;
+
 	}
 
 	delete[] read_buf;
+	delete[] write_buf;
 
 	if (total_bytes_write != source_file.file_size) {
 		TRACE(_T("\n[Warn] The written file size isn't identical. Write bytes: %lu; File size: %lu.\n"),
