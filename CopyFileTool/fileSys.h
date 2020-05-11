@@ -21,7 +21,7 @@ private:
 	BOOL checkIfDBR(HANDLE hDevice, DWORD max_transf_len, BYTE* buf);
 	BOOL getDBR(HANDLE hDevice, DWORD max_transf_len, BYTE* DBR_buf);
 	int findFATEntryBuf(HANDLE hDevice, DWORD max_transf_len, DWORD last_clu_idx, DWORD clu_idx, BYTE* FAT_buf);
-	BOOL getCluChain(HANDLE hDevice, DWORD max_transf_len, DWORD begin_clu_idx, vector<DWORD> &clu_chain);
+	DWORD getCluChain(HANDLE hDevice, DWORD max_transf_len, DWORD begin_clu_idx, DWORD* clu_chain);
 
 public:
 	~FileSys();

@@ -19,7 +19,7 @@ BOOL FileSys::checkIfDBR(HANDLE hDevice, DWORD max_transf_len, BYTE* buf) {
 	 *	2. Check FAT entries.
 	 */
 
-	// check jumpBoot and signature value
+	 // check jumpBoot and signature value
 	if (buf[0x0] != 0xEB || buf[0x1] != 0x58 || buf[0x2] != 0x90) {
 		return FALSE;
 	}
@@ -92,9 +92,10 @@ int FileSys::findFATEntryBuf(HANDLE hDevice, DWORD max_transf_len, DWORD last_cl
 	return ralative_offset << 2;
 }
 
-BOOL FileSys::getCluChain(HANDLE hDevice, DWORD max_transf_len, DWORD begin_clu_idx, vector<DWORD>& clu_chain)
+DWORD FileSys::getCluChain(HANDLE hDevice, DWORD max_transf_len, DWORD begin_clu_idx, DWORD* clu_chain)
 {
 	DWORD cur_clu_idx = 0, nxt_clu_idx = begin_clu_idx, clu_entry_idx;
+	DWORD chain_len = 0;
 	BYTE* cur_FAT_buf = new BYTE[max_transf_len];
 
 	// link cluster chain
@@ -104,17 +105,18 @@ BOOL FileSys::getCluChain(HANDLE hDevice, DWORD max_transf_len, DWORD begin_clu_
 		if (clu_entry_idx < 0) {
 			TRACE(_T("\n[Error] Read FAT entry failed. Error Code = %u.\n"), GetLastError());
 			delete[] cur_FAT_buf;
-			return FALSE;
+			return 0;
 		}
 		cur_clu_idx = nxt_clu_idx;
 
-		clu_chain.push_back(cur_clu_idx);
+		clu_chain[chain_len++] = cur_clu_idx;
+
 		nxt_clu_idx = (cur_FAT_buf[clu_entry_idx + 0]) | (cur_FAT_buf[clu_entry_idx + 1] << 8)
 			| (cur_FAT_buf[clu_entry_idx + 2] << 16) | (cur_FAT_buf[clu_entry_idx + 3] << 24);
 	} while (nxt_clu_idx != 0x0FFFFFFF);
 
 	delete[] cur_FAT_buf;
-	return TRUE;
+	return chain_len;
 }
 
 void FileSys::initFileSys() {
@@ -133,7 +135,7 @@ int FileSys::getFileList(Device cur_device) {
 	DWORD hid_sec_num, rsvd_sec_num, root_begin_clu;
 	ULONGLONG byte_per_FAT;
 	DWORD file_cnt = 0;
-	vector<DWORD> root_clu_chain;
+	DWORD* root_clu_chain = new DWORD[100]; // assume the maximum cluster number of root is 100
 
 	HANDLE hDevice = cur_device.openDevice();
 	DWORD max_transf_len = cur_device.getMaxTransfLen();
@@ -152,21 +154,22 @@ int FileSys::getFileList(Device cur_device) {
 
 	this->sec_per_clu = DBR_buf[0x0D];
 	this->FAT_num = DBR_buf[0x10];
-	this->sec_per_FAT = (DBR_buf[0x24]) | (DBR_buf[0x25] << 8) 
-						| (DBR_buf[0x26] << 16) | (DBR_buf[0x27] << 24);
+	this->sec_per_FAT = (DBR_buf[0x24]) | (DBR_buf[0x25] << 8)
+		| (DBR_buf[0x26] << 16) | (DBR_buf[0x27] << 24);
 
 	byte_per_FAT = (ULONGLONG)this->sec_per_FAT * PHYSICAL_SECTOR_SIZE;
 
 	hid_sec_num = (DBR_buf[0x1C]) | (DBR_buf[0x1D] << 8)
-				| (DBR_buf[0x1E] << 16) | (DBR_buf[0x1F] << 24);
+		| (DBR_buf[0x1E] << 16) | (DBR_buf[0x1F] << 24);
 	rsvd_sec_num = (DBR_buf[0x0E]) | (DBR_buf[0x0F] << 8);
 	root_begin_clu = (DBR_buf[0x2C]) | (DBR_buf[0x2D] << 8)
-					| (DBR_buf[0x2E] << 16) | (DBR_buf[0x2F] << 24);
+		| (DBR_buf[0x2E] << 16) | (DBR_buf[0x2F] << 24);
 
 	this->FAT_offset = ((ULONGLONG)hid_sec_num + rsvd_sec_num) * PHYSICAL_SECTOR_SIZE;
 
 	// get root cluster chain
-	if (!getCluChain(hDevice, max_transf_len, root_begin_clu, root_clu_chain)) {
+	const DWORD chain_len = getCluChain(hDevice, max_transf_len, root_begin_clu, root_clu_chain);
+	if (chain_len == 0) {
 		TRACE(_T("\n[Error] Get ROOT cluster chain failed. Error Code = %u.\n"), GetLastError());
 		CloseHandle(hDevice);
 		return -1;
@@ -178,7 +181,8 @@ int FileSys::getFileList(Device cur_device) {
 	wchar_t remove_word = 0xFFFF, end_word = 0x0000;
 	CString LFN_content = _T("");
 
-	for (DWORD cur_clu_idx : root_clu_chain) {
+	for (DWORD i = 0; i < chain_len; i++) {
+		DWORD cur_clu_idx = root_clu_chain[i];
 		// read cluster
 		BYTE* cur_clu = new BYTE[this->sec_per_clu * PHYSICAL_SECTOR_SIZE];
 		ULONGLONG cur_clu_offset = this->heap_offset + ((ULONGLONG)cur_clu_idx - 2) * this->sec_per_clu * PHYSICAL_SECTOR_SIZE;
@@ -263,13 +267,14 @@ int FileSys::getFileList(Device cur_device) {
 				file_info.push_back(cur_file);
 
 				file_cnt++;
-				
+
 				LFN_content.Empty();
 			}
 		}
 
 		delete[] cur_clu;
 	}
+	delete[] root_clu_chain;
 
 	CloseHandle(hDevice);
 	return file_cnt;
@@ -279,12 +284,12 @@ BOOL FileSys::copyfile(Device cur_device, CString dest_path, FileInfo source_fil
 	// open destination file
 	wchar_t* dest_pathW = cstr2strW(dest_path);
 	HANDLE hDest = CreateFile(dest_pathW,
-							GENERIC_WRITE,
-							0,
-							NULL,
-							CREATE_NEW,
-							FILE_ATTRIBUTE_NORMAL,
-							NULL);
+		GENERIC_WRITE,
+		0,
+		NULL,
+		CREATE_NEW,
+		FILE_ATTRIBUTE_NORMAL,
+		NULL);
 	delete[] dest_pathW;
 	if (hDest == INVALID_HANDLE_VALUE) {
 		TRACE(_T("\n[Error] Open destination file failed. Error Code = %u.\n"), GetLastError());
@@ -309,15 +314,35 @@ BOOL FileSys::copyfile(Device cur_device, CString dest_path, FileInfo source_fil
 		return FALSE;
 	}
 
+	// timer
+	LARGE_INTEGER nFreq;
+	LARGE_INTEGER nBeginTime;
+	LARGE_INTEGER nEndTime;
+	double time;
+	CString show_time = _T("");
+
+	QueryPerformanceFrequency(&nFreq);
+	QueryPerformanceCounter(&nBeginTime);
+
 	// get cluster chain
-	vector<DWORD> clu_chain;
+	DWORD file_clu_num = ceil(double(source_file.file_size) / (this->sec_per_clu * PHYSICAL_SECTOR_SIZE));
+	DWORD* clu_chain = new DWORD[file_clu_num];
 	DWORD file_begin_clu = source_file.file_addr;
-	if (!getCluChain(hDevice, max_transf_len, file_begin_clu, clu_chain)) {
+	const DWORD chain_len = getCluChain(hDevice, max_transf_len, file_begin_clu, clu_chain);
+	if (chain_len == 0) {
 		TRACE(_T("\n[Error] Get cluster chain failed. Error Code = %u.\n"), GetLastError());
 		CloseHandle(hDest);
 		CloseHandle(hDevice);
 		return FALSE;
 	}
+
+	QueryPerformanceCounter(&nEndTime);
+	time = ((double)(nEndTime.QuadPart - nBeginTime.QuadPart) * 1000) / (double)nFreq.QuadPart;
+	show_time.Format(_T("\n[Info] Get cluster chain time: %.3f ms\n"), time);
+	TRACE(show_time);
+
+	QueryPerformanceFrequency(&nFreq);
+	QueryPerformanceCounter(&nBeginTime);
 
 	// read file content
 	DWORD dw_bytes_to_write = source_file.file_size, total_bytes_write = 0, dw_bytes_write;
@@ -326,18 +351,18 @@ BOOL FileSys::copyfile(Device cur_device, CString dest_path, FileInfo source_fil
 	BYTE* read_buf = new BYTE[max_transf_len];
 	BYTE* write_buf = new BYTE[write_max];
 
-	DWORD begin_clu_idx = clu_chain.at(0);
+	DWORD begin_clu_idx = clu_chain[0];
 	DWORD read_size = 0, write_size = 0;
-	for (auto it = clu_chain.begin(); it != clu_chain.end(); it++) {
-		DWORD cur_clu_idx = *it;
+	for (DWORD idx = 0; idx < chain_len; idx++) {
+		DWORD cur_clu_idx = clu_chain[idx];
 		// check if continus cluster
 		read_size += bytes_per_clu;
-		if (next(it) != clu_chain.end() && cur_clu_idx + 1 == *next(it) && read_size + bytes_per_clu <= max_transf_len) {
+		if (read_size + bytes_per_clu <= max_transf_len && idx + 1 != chain_len && cur_clu_idx + 1 == clu_chain[idx + 1]) {
 			continue;
 		}
 
 		// read clusters
-		ULONGLONG cur_clu_offset = this->heap_offset + ((ULONGLONG)begin_clu_idx - 2) * bytes_per_clu;
+		ULONGLONG cur_clu_offset = this->heap_offset + (ULONGLONG)(begin_clu_idx - 2) * bytes_per_clu;
 		if (!SCSISectorIO(hDevice, max_transf_len, cur_clu_offset, read_buf, read_size, FALSE)) {
 			TRACE(_T("\n[Error] Read file content failed. Error Code = %u.\n"), GetLastError());
 			delete[] read_buf;
@@ -347,15 +372,13 @@ BOOL FileSys::copyfile(Device cur_device, CString dest_path, FileInfo source_fil
 			return FALSE;
 		}
 
-		if (next(it) != clu_chain.end()) {
-			begin_clu_idx = *next(it);
-		}
+		begin_clu_idx = clu_chain[idx + 1];
 
 		// check if write now
 		memcpy(write_buf + write_size, read_buf, read_size);
 		write_size += read_size;
 		read_size = 0;
-		if (next(it) != clu_chain.end() && write_size + max_transf_len <= write_max) {
+		if (idx + 1 != chain_len && write_size + max_transf_len <= write_max) {
 			continue;
 		}
 
@@ -378,11 +401,17 @@ BOOL FileSys::copyfile(Device cur_device, CString dest_path, FileInfo source_fil
 
 	delete[] read_buf;
 	delete[] write_buf;
+	delete[] clu_chain;
 
 	if (total_bytes_write != source_file.file_size) {
 		TRACE(_T("\n[Warn] The written file size isn't identical. Write bytes: %lu; File size: %lu.\n"),
-				total_bytes_write, source_file.file_size);
+			total_bytes_write, source_file.file_size);
 	}
+
+	QueryPerformanceCounter(&nEndTime);
+	time = ((double)(nEndTime.QuadPart - nBeginTime.QuadPart) * 1000) / (double)nFreq.QuadPart;
+	show_time.Format(_T("\n[Info] Get file content time: %.3f ms\n"), time);
+	TRACE(show_time);
 
 	CloseHandle(hDest);
 	CloseHandle(hDevice);
@@ -396,7 +425,7 @@ BOOL FileSys::copyfileByAPI(Device cur_device, CString dest_path, FileInfo sourc
 	char ident = cur_device.getIdent();
 	CString source_path;
 	source_path.Format(_T("%c:\\%s"), ident, source_file.file_name);
-	
+
 	if (!CopyFile(source_path, dest_path, TRUE)) {
 		TRACE(_T("\n[Error] Copy file by API failed. Error Code = %u.\n"), GetLastError());
 		return FALSE;
