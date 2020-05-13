@@ -325,7 +325,7 @@ BOOL FileSys::copyfile(Device cur_device, CString dest_path, FileInfo source_fil
 	QueryPerformanceCounter(&nBeginTime);
 
 	// get cluster chain
-	DWORD file_clu_num = ceil(double(source_file.file_size) / (this->sec_per_clu * PHYSICAL_SECTOR_SIZE));
+	DWORD file_clu_num = (DWORD)ceil(double(source_file.file_size) / (this->sec_per_clu * PHYSICAL_SECTOR_SIZE));
 	DWORD* clu_chain = new DWORD[file_clu_num];
 	DWORD file_begin_clu = source_file.file_addr;
 	const DWORD chain_len = getCluChain(hDevice, max_transf_len, file_begin_clu, clu_chain);
@@ -348,7 +348,10 @@ BOOL FileSys::copyfile(Device cur_device, CString dest_path, FileInfo source_fil
 	DWORD dw_bytes_to_write = source_file.file_size, total_bytes_write = 0, dw_bytes_write;
 	DWORD bytes_per_clu = this->sec_per_clu * PHYSICAL_SECTOR_SIZE;
 	DWORD write_max = 512 << 10; // minimum: max_transf_len(524288)
-	BYTE* read_buf = new BYTE[max_transf_len];
+	// check wrtie max value
+	if (write_max < max_transf_len) {
+		TRACE(_T("\n[Warn] Write max value is smaller than max transfer length.\n"));
+	}
 	BYTE* write_buf = new BYTE[write_max];
 
 	DWORD begin_clu_idx = clu_chain[0];
@@ -363,9 +366,8 @@ BOOL FileSys::copyfile(Device cur_device, CString dest_path, FileInfo source_fil
 
 		// read clusters
 		ULONGLONG cur_clu_offset = this->heap_offset + (ULONGLONG)(begin_clu_idx - 2) * bytes_per_clu;
-		if (!SCSISectorIO(hDevice, max_transf_len, cur_clu_offset, read_buf, read_size, FALSE)) {
+		if (!SCSISectorIO(hDevice, max_transf_len, cur_clu_offset, write_buf + write_size, read_size, FALSE)) {
 			TRACE(_T("\n[Error] Read file content failed. Error Code = %u.\n"), GetLastError());
-			delete[] read_buf;
 			delete[] write_buf;
 			CloseHandle(hDest);
 			CloseHandle(hDevice);
@@ -375,7 +377,6 @@ BOOL FileSys::copyfile(Device cur_device, CString dest_path, FileInfo source_fil
 		begin_clu_idx = clu_chain[idx + 1];
 
 		// check if write now
-		memcpy(write_buf + write_size, read_buf, read_size);
 		write_size += read_size;
 		read_size = 0;
 		if (idx + 1 != chain_len && write_size + max_transf_len <= write_max) {
@@ -386,7 +387,6 @@ BOOL FileSys::copyfile(Device cur_device, CString dest_path, FileInfo source_fil
 		DWORD cur_bytes_to_write = (dw_bytes_to_write > write_size) ? write_size : dw_bytes_to_write;
 		if (!WriteFile(hDest, write_buf, cur_bytes_to_write, &dw_bytes_write, NULL)) {
 			TRACE(_T("\n[Error] Write file failed. Error Code = %u.\n"), GetLastError());
-			delete[] read_buf;
 			delete[] write_buf;
 			CloseHandle(hDest);
 			CloseHandle(hDevice);
@@ -399,7 +399,6 @@ BOOL FileSys::copyfile(Device cur_device, CString dest_path, FileInfo source_fil
 
 	}
 
-	delete[] read_buf;
 	delete[] write_buf;
 	delete[] clu_chain;
 
